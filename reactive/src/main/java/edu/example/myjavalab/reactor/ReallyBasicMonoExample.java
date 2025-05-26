@@ -22,29 +22,32 @@
  * SOFTWARE.
  */
 
-package org.example.thread.classic;
+package edu.example.myjavalab.reactor;
 
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-
-import java.math.BigInteger;
-import org.example.thread.classic.ComplexCalculation.Input;
-import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 /**
- * Test class for {@link ComplexCalculation}.
+ * As the name implies, basic example with {@link Mono}.
+ * Playing around with this basic Publisher, and giving
+ * Subscriber and Subscription in a functional way (lambdas).
  */
-public class TestComplexCalculation {
+public class ReallyBasicMonoExample {
 
-  @Test
-  public void testComplexCalculation() {
+  private static final Logger log = LoggerFactory.getLogger(ReallyBasicMonoExample.class);
 
-    Input input1 = new Input(BigInteger.valueOf(23), BigInteger.valueOf(500));
-    Input input2 = new Input(BigInteger.valueOf(70), BigInteger.valueOf(800));
+  public static void main(String[] args) {
 
-    ComplexCalculation complexCalculation = new ComplexCalculation();
-
-    BigInteger result = complexCalculation.calculateResult(input1, input2);
-
-    assertNotEquals(BigInteger.ZERO, result);
+    // it will print out the value multiplied via logger
+    // and then that it is completed
+    Mono.just(23)
+        .map(value -> value * 2)
+        .subscribe(
+            value -> log.info("Received {}", value),
+            error -> log.error("Something bad has happened!"),
+            () -> log.info("Processing is completed!"),
+            // requesting more than it can give
+            subscription -> subscription.request(4));
   }
 }
