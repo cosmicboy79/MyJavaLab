@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package org.example.thread.classic;
+package edu.example.myjavalab.thread.classic;
 
 import java.math.BigInteger;
 import java.util.Arrays;

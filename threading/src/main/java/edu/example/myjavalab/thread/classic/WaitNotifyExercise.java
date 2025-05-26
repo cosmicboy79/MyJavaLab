@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package org.example.thread.classic;
+package edu.example.myjavalab.thread.classic;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
