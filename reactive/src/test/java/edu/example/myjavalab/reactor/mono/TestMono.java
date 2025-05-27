@@ -22,8 +22,9 @@
  * SOFTWARE.
  */
 
-package edu.example.myjavalab.reactor;
+package edu.example.myjavalab.reactor.mono;
 
+import static edu.example.myjavalab.reactor.mono.internal.SomeUtils.ERROR_MESSAGE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,9 +35,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import edu.example.myjavalab.reactor.mono.internal.SomeBusinessLogic;
+import edu.example.myjavalab.reactor.mono.internal.SomeUtils;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Mono;
@@ -46,28 +49,10 @@ import reactor.core.publisher.Mono;
  */
 public class TestMono {
 
-  public static final String ERROR_MESSAGE = "Negative number!";
-
-  private static Mono<Integer> createPublisherFromValue(int inputValue) {
-
-    if (inputValue > 0) {
-
-      return Mono.just(inputValue);
-    }
-
-    if (inputValue < 0) {
-
-      return Mono.error(new Exception(ERROR_MESSAGE));
-    }
-
-    return Mono.empty();
-  }
-
   /**
    * GIVEN a producer of a single integer value
    * AND value is multiplied by a factor after being produced
-   * WHEN a consumer subscribes to this producer
-   * THEN the multiplied value is processed, as expected
+   * WHEN a consumer subscribes to this producer THEN the multiplied value is processed, as expected
    * AND producer completes without errors
    */
   @Test
@@ -99,8 +84,7 @@ public class TestMono {
   /**
    * GIVEN a producer of a single string value
    * AND value is upper-cased after being produced
-   * WHEN two consumers subscribe to this producer
-   * THEN the upper-cased value is processed twice, as expected
+   * WHEN two consumers subscribe to this producer THEN the upper-cased value is processed twice, as expected
    */
   @Test
   public void testSimpleMonoWithTwoSubscriptions() {
@@ -126,8 +110,7 @@ public class TestMono {
   /**
    * GIVEN a producer of a single integer value
    * WHEN a consumer subscribes to this producer
-   * THEN the value is processed, as expected
-   * AND producer completes without errors
+   * THEN the value is processed, as expected AND producer completes without errors
    */
   @Test
   public void testSimpleMonoProcessing() {
@@ -140,7 +123,8 @@ public class TestMono {
     Consumer<Throwable> onError = processNumber::onError;
     Runnable onComplete = processNumber::onComplete;
 
-    createPublisherFromValue(positiveNumber).subscribe(subscriber, onError, onComplete);
+    SomeUtils.INSTANCE.createPublisherFromValue(positiveNumber)
+        .subscribe(subscriber, onError, onComplete);
 
     ArgumentCaptor<Integer> valueToProcess = ArgumentCaptor.captor();
 
@@ -166,7 +150,8 @@ public class TestMono {
     Consumer<Throwable> onError = processNumber::onError;
     Runnable onComplete = processNumber::onComplete;
 
-    createPublisherFromValue(0).subscribe(subscriber, onError, onComplete);
+    SomeUtils.INSTANCE.createPublisherFromValue(0)
+        .subscribe(subscriber, onError, onComplete);
 
     verify(processNumber, never()).process(any());
     verify(processNumber, atMostOnce()).onComplete();
@@ -176,8 +161,7 @@ public class TestMono {
   /**
    * GIVEN a producer that results in error
    * WHEN a consumer subscribes to this producer
-   * THEN no value is processed
-   * AND error is processed
+   * THEN no value is processed AND error is processed
    */
   @Test
   public void testMonoOnError() {
@@ -190,7 +174,8 @@ public class TestMono {
     Consumer<Throwable> onError = processNumber::onError;
     Runnable onComplete = processNumber::onComplete;
 
-    createPublisherFromValue(negativeNumber).subscribe(subscriber, onError, onComplete);
+    SomeUtils.INSTANCE.createPublisherFromValue(negativeNumber)
+        .subscribe(subscriber, onError, onComplete);
 
     ArgumentCaptor<Throwable> expectedError = ArgumentCaptor.captor();
 
@@ -211,17 +196,18 @@ public class TestMono {
 
     final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
 
-    AtomicBoolean hasExecuted = new AtomicBoolean(false);
+    AtomicBoolean hasBeenExecuted = new AtomicBoolean(false);
 
-    Mono<Integer> producer = Mono.fromSupplier(() -> giveSumToMe(hasExecuted));
+    Mono<Integer> producer = Mono.fromSupplier(
+        () -> SomeUtils.INSTANCE.giveSumToMe(hasBeenExecuted));
 
     // up until now, operation was not executed
-    assertFalse(hasExecuted.get());
+    assertFalse(hasBeenExecuted.get());
 
     producer.subscribe(processNumber::process);
 
     // now operation was executed ...
-    assertTrue(hasExecuted.get());
+    assertTrue(hasBeenExecuted.get());
 
     // ... as expected
     ArgumentCaptor<Integer> valueToProcess = ArgumentCaptor.captor();
@@ -231,37 +217,97 @@ public class TestMono {
     assertTrue(valueToProcess.getValue() > 0);
   }
 
-  private int giveSumToMe(AtomicBoolean hasExecuted) {
+  /**
+   * GIVEN a producer of a single integer value
+   * AND it is based on a {@link CompletableFuture}
+   * WHEN it depends on a supplier operation
+   * THEN supplier operation is called only when a consumer subscribes to the producer
+   */
+  @Test
+  public void testMonoLazinessOnFuture() {
 
-    hasExecuted.set(true);
-    return Stream.of(6, 2, 9).mapToInt(v -> v).sum();
+    SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    AtomicBoolean hasBeenExecuted = new AtomicBoolean(false);
+
+    // producer with no supplier: not lazy!
+    Mono.fromFuture(SomeUtils.INSTANCE.giveFutureSumToMe(hasBeenExecuted));
+
+    // operation is executed because there is no supplier
+    assertTrue(hasBeenExecuted.get());
+
+    // putting back to false
+    hasBeenExecuted.set(false);
+
+    // producer with supplier: lazy!
+    Mono<Integer> producer = Mono.fromFuture(
+        () -> SomeUtils.INSTANCE.giveFutureSumToMe(hasBeenExecuted));
+
+    // operation is not executed because there is a supplier now
+    assertFalse(hasBeenExecuted.get());
+
+    // let's subscribe
+    producer.subscribe(processNumber::process);
+
+    // operation is now executed because there is a subscription
+    assertTrue(hasBeenExecuted.get());
+
+    // however, value is not yet produced: future is not completed
+    verify(processNumber, never()).process(any());
+
+    // putting back to false
+    hasBeenExecuted.set(false);
+
+    // so, now, we show create the future based publisher, and wait a bit for the value
+
+    // recreating things
+    processNumber = mock(SomeBusinessLogic.class);
+    producer = Mono.fromFuture(
+        () -> SomeUtils.INSTANCE.giveFutureSumToMe(hasBeenExecuted));
+
+    assertFalse(hasBeenExecuted.get());
+
+    producer.subscribe(processNumber::process);
+
+    assertTrue(hasBeenExecuted.get());
+
+    // waiting a bit
+    SomeUtils.INSTANCE.aBitOfSleeping(5);
+
+    // we should have now a produced value
+    ArgumentCaptor<Integer> valueToProcess = ArgumentCaptor.captor();
+
+    verify(processNumber, atMostOnce()).process(valueToProcess.capture());
+
+    assertTrue(valueToProcess.getValue() > 0);
   }
 
   /**
-   * Private representation for testing purposes of some business logic
-   * that must be carried on as a resulting of the Producer execution.
-   *
-   * @param <T> type of the value to be processed
+   * GIVEN a producer of a single value
+   * AND the creation of this producer is a heavyweight operation
+   * WHEN deferring its creation
+   * THEN producer is only created when there is a subscription to it
    */
-  private interface SomeBusinessLogic<T> {
+  @Test
+  public void testDeferMonoCreation() {
 
-    /**
-     * Will do "something" with the produced value.
-     *
-     * @param value input of a type
-     */
-    void process(T value);
+    AtomicBoolean hasBeenCreated = new AtomicBoolean(false);
+    AtomicBoolean hasBeenExecuted = new AtomicBoolean(false);
 
-    /**
-     * Will do "something" in case something went wrong during producing.
-     *
-     * @param t error occurred
-     */
-    void onError(Throwable t);
+    Mono<Integer> producer = Mono.defer(() -> Mono.fromSupplier(() -> {
 
-    /**
-     * Will do "something" in case there's nothing more to produce.
-     */
-    void onComplete();
+      hasBeenCreated.set(true);
+      return SomeUtils.INSTANCE.giveSumToMe(hasBeenExecuted);
+    }));
+
+    assertFalse(hasBeenCreated.get());
+    assertFalse(hasBeenExecuted.get());
+
+    SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    producer.subscribe(processNumber::process);
+
+    assertTrue(hasBeenCreated.get());
+    assertTrue(hasBeenExecuted.get());
   }
 }
