@@ -45,7 +45,7 @@ public enum SomeUtils {
    * @param inputValue input value to use during creation
    * @return Producer, or Publisher, or Observable, or simply put {@link Mono}
    */
-  public Mono<Integer> createPublisherFromValue(int inputValue) {
+  public Mono<Integer> createPublisherForValue(int inputValue) {
 
     if (inputValue > 0) {
 

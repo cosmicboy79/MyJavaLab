@@ -32,7 +32,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atMostOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import edu.example.myjavalab.reactor.mono.internal.SomeBusinessLogic;
@@ -52,7 +51,8 @@ public class TestMono {
   /**
    * GIVEN a producer of a single integer value
    * AND value is multiplied by a factor after being produced
-   * WHEN a consumer subscribes to this producer THEN the multiplied value is processed, as expected
+   * WHEN a consumer subscribes to this producer
+   * THEN the multiplied value is processed, as expected
    * AND producer completes without errors
    */
   @Test
@@ -82,57 +82,42 @@ public class TestMono {
   }
 
   /**
-   * GIVEN a producer of a single string value
-   * AND value is upper-cased after being produced
-   * WHEN two consumers subscribe to this producer THEN the upper-cased value is processed twice, as expected
+   * GIVEN a producer of a single integer value
+   * WHEN two consumers subscribe to this producer
+   * THEN the value is processed twice
+   * AND producer completes without errors
    */
   @Test
   public void testSimpleMonoWithTwoSubscriptions() {
 
-    String inputValue = "something";
+    int input = 3;
 
-    Mono<String> toUpperPublisher = Mono.just(inputValue)
-        .map(String::toUpperCase);
+    // creating the publisher
+    Mono<Integer> publisher = SomeUtils.INSTANCE.createPublisherForValue(input);
 
-    final SomeBusinessLogic<String> processWord = mock(SomeBusinessLogic.class);
+    final SomeBusinessLogic<Integer> firstProcessNumber = mock(SomeBusinessLogic.class);
 
-    // Publisher or Producer or Observable with 2 subscribers
-    // both must show that they received the upper-cased value
-    toUpperPublisher.subscribe(processWord::process);
-    toUpperPublisher.subscribe(processWord::process);
-
-    ArgumentCaptor<String> valueToProcess = ArgumentCaptor.captor();
-
-    verify(processWord, times(2)).process(valueToProcess.capture());
-    assertEquals(inputValue.toUpperCase(), valueToProcess.getValue());
-  }
-
-  /**
-   * GIVEN a producer of a single integer value
-   * WHEN a consumer subscribes to this producer
-   * THEN the value is processed, as expected AND producer completes without errors
-   */
-  @Test
-  public void testSimpleMonoProcessing() {
-
-    int positiveNumber = 3;
-
-    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
-
-    Consumer<Integer> subscriber = processNumber::process;
-    Consumer<Throwable> onError = processNumber::onError;
-    Runnable onComplete = processNumber::onComplete;
-
-    SomeUtils.INSTANCE.createPublisherFromValue(positiveNumber)
-        .subscribe(subscriber, onError, onComplete);
+    // subscribing for the first time with one (implicit) subscriber
+    publisher.subscribe(firstProcessNumber::process, firstProcessNumber::onError, firstProcessNumber::onComplete);
 
     ArgumentCaptor<Integer> valueToProcess = ArgumentCaptor.captor();
 
-    verify(processNumber, atMostOnce()).process(valueToProcess.capture());
-    verify(processNumber, atMostOnce()).onComplete();
-    verify(processNumber, never()).onError(any(Throwable.class));
+    verify(firstProcessNumber, atMostOnce()).process(valueToProcess.capture());
+    verify(firstProcessNumber, atMostOnce()).onComplete();
+    verify(firstProcessNumber, never()).onError(any(Throwable.class));
 
-    assertEquals(positiveNumber, valueToProcess.getValue());
+    assertEquals(input, valueToProcess.getValue());
+
+    // subscribing for the second time to the same publisher, with another (implicit) subscription
+    final SomeBusinessLogic<Integer> secondProcessNumber = mock(SomeBusinessLogic.class);
+
+    publisher.subscribe(secondProcessNumber::process, secondProcessNumber::onError, secondProcessNumber::onComplete);
+
+    verify(secondProcessNumber, atMostOnce()).process(valueToProcess.capture());
+    verify(secondProcessNumber, atMostOnce()).onComplete();
+    verify(secondProcessNumber, never()).onError(any(Throwable.class));
+
+    assertEquals(input, valueToProcess.getValue());
   }
 
   /**
@@ -150,7 +135,7 @@ public class TestMono {
     Consumer<Throwable> onError = processNumber::onError;
     Runnable onComplete = processNumber::onComplete;
 
-    SomeUtils.INSTANCE.createPublisherFromValue(0)
+    SomeUtils.INSTANCE.createPublisherForValue(0)
         .subscribe(subscriber, onError, onComplete);
 
     verify(processNumber, never()).process(any());
@@ -161,7 +146,8 @@ public class TestMono {
   /**
    * GIVEN a producer that results in error
    * WHEN a consumer subscribes to this producer
-   * THEN no value is processed AND error is processed
+   * THEN no value is processed
+   * AND error is processed
    */
   @Test
   public void testMonoOnError() {
@@ -174,7 +160,7 @@ public class TestMono {
     Consumer<Throwable> onError = processNumber::onError;
     Runnable onComplete = processNumber::onComplete;
 
-    SomeUtils.INSTANCE.createPublisherFromValue(negativeNumber)
+    SomeUtils.INSTANCE.createPublisherForValue(negativeNumber)
         .subscribe(subscriber, onError, onComplete);
 
     ArgumentCaptor<Throwable> expectedError = ArgumentCaptor.captor();
