@@ -16,14 +16,27 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!-- 3rd Parties -->
     <junit.version>5.9.1</junit.version>
+    <logback.version>1.5.18</logback.version>
+    <mockito.version>5.18.0</mockito.version>
   </properties>
 
   <dependencyManagement>
     <dependencies>
       <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>${logback.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.junit.jupiter</groupId>
         <artifactId>junit-jupiter-engine</artifactId>
         <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-junit-jupiter</artifactId>
+        <version>${mockito.version}</version>
         <scope>test</scope>
       </dependency>
     </dependencies>
