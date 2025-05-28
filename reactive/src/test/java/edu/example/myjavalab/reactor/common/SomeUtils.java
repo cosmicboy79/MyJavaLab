@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package edu.example.myjavalab.reactor.mono.internal;
+package edu.example.myjavalab.reactor.common;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
