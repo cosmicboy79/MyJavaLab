@@ -39,6 +39,7 @@ import edu.example.myjavalab.reactor.flux.internal.NumberGenerator;
 import edu.example.myjavalab.reactor.common.SomeBusinessLogic;
 import edu.example.myjavalab.reactor.common.SomeUtils;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
@@ -384,5 +385,82 @@ public class TestFlux {
     verify(processNumber, times(howManyNumbers * howManyThreads)).process(anyInt());
     verify(processNumber, atMostOnce()).onComplete();
     verify(processNumber, never()).onError(any(Throwable.class));
+  }
+
+  /**
+   * GIVEN a producer that generates the same value multiple times
+   * WHEN a consumer subscribes to it
+   * THEN consumer receives the same value, multiple times
+   */
+  @Test
+  public void testFluxGeneration() {
+
+    // preparation
+    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    final int numberToGenerate = 35;
+    final int howManyToTake = 7;
+
+    // create producer with implicit consumer associated to it
+    Flux.<Integer>generate(synchronousSink -> synchronousSink.next(numberToGenerate))
+        .log("take")
+        .take(howManyToTake)
+        .log("sub")
+        .subscribe(processNumber::process, processNumber::onError, processNumber::onComplete);
+
+    ArgumentCaptor<Integer> valuesToProcess = ArgumentCaptor.captor();
+
+    // check the processing accordingly
+    verify(processNumber, times(howManyToTake)).process(valuesToProcess.capture());
+    verify(processNumber, atMostOnce()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    assertEquals(howManyToTake, valuesToProcess.getAllValues().size());
+
+    valuesToProcess.getAllValues().forEach(capturedValue -> assertEquals(numberToGenerate, capturedValue));
+  }
+
+  /**
+   * GIVEN a producer that generates the same value multiple times
+   * AND has a state accumulator for the number that is generating
+   * WHEN a consumer subscribes to it
+   * THEN consumer receives the same value, multiple times
+   * AND accumulator has the expected value
+   */
+  @Test
+  public void testFluxGenerationWithState() {
+
+    // preparation
+    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    final int numberToGenerate = 35;
+    final int howManyToTake = 7;
+    // not that good, but then again I just want to check the internal state in this test
+    final AtomicInteger stateAccumulatorChecker = new AtomicInteger(0);
+
+    // create producer with implicit consumer associated to it
+    Flux.<Integer, Integer>generate(() -> 0, (accumulator, synchronousSink) -> {
+          synchronousSink.next(numberToGenerate);
+          accumulator += numberToGenerate ;
+          stateAccumulatorChecker.set(accumulator);
+          return accumulator;
+        })
+        .log("take")
+        .take(howManyToTake)
+        .log("sub")
+        .subscribe(processNumber::process, processNumber::onError, processNumber::onComplete);
+
+    ArgumentCaptor<Integer> valuesToProcess = ArgumentCaptor.captor();
+
+    // check the processing accordingly
+    verify(processNumber, times(howManyToTake)).process(valuesToProcess.capture());
+    verify(processNumber, atMostOnce()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    assertEquals(howManyToTake * numberToGenerate, stateAccumulatorChecker.get());
+
+    assertEquals(howManyToTake, valuesToProcess.getAllValues().size());
+
+    valuesToProcess.getAllValues().forEach(capturedValue -> assertEquals(numberToGenerate, capturedValue));
   }
 }
