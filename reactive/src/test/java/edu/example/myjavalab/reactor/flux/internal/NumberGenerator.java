@@ -22,32 +22,44 @@
  * SOFTWARE.
  */
 
-package edu.example.myjavalab.reactor.mono.internal;
+package edu.example.myjavalab.reactor.flux.internal;
+
+import java.util.Random;
+import java.util.function.Consumer;
+import reactor.core.publisher.FluxSink;
 
 /**
- * Representation of some business logic that must be carried on as a
- * resulting of the Producer execution.
- *
- * @param <T> type of the value to be processed
+ * Creates a subscriber that works on a {@link FluxSink}.
  */
-public interface SomeBusinessLogic<T> {
+public class NumberGenerator implements Consumer<FluxSink<Integer>> {
+
+  private FluxSink<Integer> fluxSink;
+  private final Random random = new Random();
+
+  @Override
+  public void accept(FluxSink<Integer> sink) {
+
+    fluxSink = sink;
+  }
 
   /**
-   * Will do "something" with the produced value.
+   * Generates random numbers.
    *
-   * @param value input of a type
+   * @param max maximum of random numbers to be generated
    */
-  void process(T value);
+  public void generate(int max) {
+
+    for (int i = 0; i < max; i++) {
+
+      fluxSink.next(random.nextInt());
+    }
+  }
 
   /**
-   * Will do "something" in case something went wrong during producing.
-   *
-   * @param t error occurred
+   * Marks the operation as completed.
    */
-  void onError(Throwable t);
+  public void complete() {
 
-  /**
-   * Will do "something" in case there's nothing more to produce.
-   */
-  void onComplete();
+    fluxSink.complete();
+  }
 }

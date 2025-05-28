@@ -26,6 +26,7 @@ package edu.example.myjavalab.reactor.flux;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atMostOnce;
 import static org.mockito.Mockito.mock;
@@ -33,7 +34,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import edu.example.myjavalab.reactor.mono.internal.SomeBusinessLogic;
+import edu.example.myjavalab.reactor.common.SomeNumberSubscriber;
+import edu.example.myjavalab.reactor.flux.internal.NumberGenerator;
+import edu.example.myjavalab.reactor.common.SomeBusinessLogic;
+import edu.example.myjavalab.reactor.common.SomeUtils;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -41,6 +45,9 @@ import reactor.core.publisher.Flux;
 
 /**
  * Playing around with {@link Flux} via JUnit tests.
+ * <p>
+ * The terms "producer" and "publisher" are used interchangeable in this test class.
+ * Likewise, the terms "consumer" and "subscriber".
  */
 public class TestFlux {
 
@@ -54,13 +61,17 @@ public class TestFlux {
   @Test
   public void testFluxWithMap() {
 
+    // preparation
     List<Integer> numbers = List.of(1, 2, 3, 4);
     int multiplier = 2;
 
     final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
 
+    // producer with implicit consumer
     Flux.fromIterable(numbers)
+        .log("map")
         .map(value -> value * multiplier)
+        .log("sub")
         .subscribe(
             processNumber::process,
             processNumber::onError,
@@ -70,6 +81,7 @@ public class TestFlux {
 
     ArgumentCaptor<Integer> valuesToProcess = ArgumentCaptor.captor();
 
+    // expected processing
     verify(processNumber, times(numbers.size())).process(valuesToProcess.capture());
     verify(processNumber, atMostOnce()).onComplete();
     verify(processNumber, never()).onError(any(Throwable.class));
@@ -89,14 +101,16 @@ public class TestFlux {
   @Test
   public void testSimpleFluxWithTwoSubscriptions() {
 
+    // preparation
     List<String> strings = List.of("something", "another");
-
-    Flux<String> toUpperPublisher = Flux.fromIterable(strings)
-        .map(String::toUpperCase);
 
     final SomeBusinessLogic<String> processWord = mock(SomeBusinessLogic.class);
 
-    // Publisher or Producer or Observable with 2 subscribers
+    // producer
+    Flux<String> toUpperPublisher = Flux.fromIterable(strings)
+        .map(String::toUpperCase).log();
+
+    // Publisher or Producer or Observable with 2 implicit subscribers
     // both must show that they received the upper-cased value
     toUpperPublisher.subscribe(processWord::process);
     toUpperPublisher.subscribe(processWord::process);
@@ -112,6 +126,62 @@ public class TestFlux {
   }
 
   /**
+   * GIVEN a producer of a list of numbers
+   * WHEN a consumer subscribes to this producer
+   * AND consumer request for data multiple times
+   * THEN producer will give data back until it is completed
+   */
+  @Test
+  public void testSimpleFluxWithOneSubscription() {
+
+    // preparation
+    List<Integer> numbers = List.of(9, 8, 7, 6, 5);
+    List<ArgumentCaptor<Integer>> captors = List.of(ArgumentCaptor.captor(), ArgumentCaptor.captor(), ArgumentCaptor.captor());
+
+    int howMany = 2;
+
+    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    // creating the producer and subscribing to it with an explicit consumer
+    Flux<Integer> toUpperPublisher = Flux.fromIterable(numbers).log();
+
+    SomeNumberSubscriber subscriber = new SomeNumberSubscriber(processNumber);
+    toUpperPublisher.subscribe(subscriber);
+
+    // subscriber will ask for the first batch of data
+    // publisher won't be completed
+    subscriber.getSubscription().request(howMany);
+
+    verify(processNumber, times(howMany)).process(captors.getFirst().capture());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    assertEquals(numbers.get(0), captors.getFirst().getAllValues().get(0));
+    assertEquals(numbers.get(1), captors.getFirst().getAllValues().get(1));
+
+    // subscriber will ask for the second batch of data
+    // publisher won't be completed
+    subscriber.getSubscription().request(howMany);
+
+    verify(processNumber, times(howMany * 2)).process(captors.get(1).capture());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    assertEquals(numbers.get(2), captors.get(1).getAllValues().get(2));
+    assertEquals(numbers.get(3), captors.get(1).getAllValues().get(3));
+
+    // subscriber will ask for the last batch of data
+    // publisher will give less back and be completed
+    subscriber.getSubscription().request(howMany);
+
+    verify(processNumber, times((howMany * 2) + 1)).process(captors.getLast().capture());
+    verify(processNumber, atMostOnce()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    assertEquals(numbers.get(4), captors.getLast().getAllValues().get(4));
+  }
+
+  /**
    * GIVEN a producer of string values on a stream
    * WHEN one consumer subscribes and uses these values
    * THEN second consumer won't be able to use the same stream
@@ -119,13 +189,15 @@ public class TestFlux {
   @Test
   public void testFluxWithMultipleSubscriptionsOnStream() {
 
+    // preparation
     List<String> strings = List.of("something", "another");
-
-    Flux<String> publisher = Flux.fromStream(strings.stream());
 
     SomeBusinessLogic<String> firstProcessWord = mock(SomeBusinessLogic.class);
 
-    // using one (implicit) subscriber
+    // producer
+    Flux<String> publisher = Flux.fromStream(strings.stream()).log();
+
+    // using an implicit subscriber
     publisher.subscribe(firstProcessWord::process);
 
     verify(firstProcessWord, times(strings.size())).process(anyString());
@@ -134,7 +206,7 @@ public class TestFlux {
 
     SomeBusinessLogic<String> secondProcessWord = mock(SomeBusinessLogic.class);
 
-    // using another (implicit) subscriber
+    // using another implicit subscriber
     publisher.subscribe(secondProcessWord::process);
 
     // given that stream was already used by first subscriber...
@@ -142,5 +214,175 @@ public class TestFlux {
     verify(secondProcessWord, never()).onComplete();
     // it receives an error because Java throws an exception about the closed stream
     verify(secondProcessWord, atMostOnce()).onError(any(Throwable.class));
+  }
+
+  /**
+   * GIVEN a producer of string values on a supplied stream
+   * WHEN one consumer subscribes and uses these values
+   * THEN second consumer will also use values because stream is supplied
+   */
+  @Test
+  public void testFluxWithMultipleSubscriptionsOnSuppliedStream() {
+
+    // preparation
+    SomeBusinessLogic<String> firstProcessWord = mock(SomeBusinessLogic.class);
+
+    List<String> strings = List.of("something", "another");
+
+    // producer
+    Flux<String> publisher = Flux.fromStream(strings::stream).log();
+
+    // using an implicit subscriber
+    publisher.subscribe(firstProcessWord::process);
+
+    verify(firstProcessWord, times(strings.size())).process(anyString());
+    verify(firstProcessWord, atMostOnce()).onComplete();
+    verify(firstProcessWord, never()).onError(any(Throwable.class));
+
+    SomeBusinessLogic<String> secondProcessWord = mock(SomeBusinessLogic.class);
+
+    // using another implicit subscriber
+    publisher.subscribe(secondProcessWord::process);
+
+    // given that stream was already used by first subscriber...
+    verify(firstProcessWord, times(strings.size())).process(anyString());
+    verify(firstProcessWord, atMostOnce()).onComplete();
+    verify(firstProcessWord, never()).onError(any(Throwable.class));
+  }
+
+  /**
+   * GIVEN a producer associated with a numbers generator
+   * AND a consumer already subscribed to it
+   * WHEN numbers are created by generator
+   * THEN and only then they are processed
+   */
+  @Test
+  public void testFluxSinkOfData() {
+
+    // preparation
+    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    final int howManyNumbers = 5;
+
+    // producer created, associated to a generator and with an implicit consumer subscribed to it
+    final NumberGenerator numbers = new NumberGenerator();
+
+    Flux.create(numbers)
+        .log("subscription!")
+        .subscribe(processNumber::process, processNumber::onError, processNumber::onComplete);
+
+    // generator has not created any numbers yet, so nothing has happened
+    verify(processNumber, never()).process(anyInt());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    // now numbers will be generated
+    numbers.generate(howManyNumbers);
+    numbers.complete();
+
+    // ... and now they are processed
+    verify(processNumber, times(howManyNumbers)).process(anyInt());
+    verify(processNumber, atMostOnce()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+  }
+
+  /**
+   * GIVEN a producer associated with a numbers generator
+   * AND a consumer already subscribed to it
+   * WHEN numbers are created by generator
+   * AND consumer requests for items
+   * THEN and only then they are processed
+   */
+  @Test
+  public void testFluxSinkOfDataMultipleRequests() {
+
+    // preparation
+    final int howManyNumbers = 5;
+    final int howManyToRequest = 2;
+
+    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+    final SomeNumberSubscriber subscriber = new SomeNumberSubscriber(processNumber);
+
+    // producer created, associated to a generator and with an explicit consumer subscribed to it
+    final NumberGenerator numbers = new NumberGenerator();
+
+    Flux.create(numbers)
+        .log("subscription!")
+        .subscribe(subscriber);
+
+    // generator has not created any numbers yet, so nothing has happened
+    verify(processNumber, never()).process(anyInt());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    // now numbers will be generated
+    numbers.generate(howManyNumbers);
+    numbers.complete();
+
+    // still nothing happened, because subscriber did not request for it
+    verify(processNumber, never()).process(anyInt());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    // now, requesting some data
+    subscriber.getSubscription().request(howManyToRequest);
+
+    // ... and now they are processed a bit
+    verify(processNumber, times(howManyToRequest)).process(anyInt());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    // requesting more than it has already provided
+    subscriber.getSubscription().request(howManyNumbers + howManyToRequest);
+
+    // ... and now all is processed
+    verify(processNumber, times(howManyNumbers)).process(anyInt());
+    verify(processNumber, atMostOnce()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+  }
+
+  /**
+   * GIVEN a producer associated with a numbers generator
+   * AND a consumer already subscribed to it
+   * WHEN numbers are created by generator via many threads
+   * THEN numbers created by all threads are processed
+   */
+  @Test
+  public void testFluxThreadSafety() {
+
+    // preparation
+    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    final int howManyThreads = 3;
+    final int howManyNumbers = 5;
+
+    // producer created, associated to a generator and with an implicit consumer subscribed to it
+    final NumberGenerator numbers = new NumberGenerator();
+
+    Flux.create(numbers)
+        .log("subscription!")
+        .subscribe(processNumber::process, processNumber::onError, processNumber::onComplete);
+
+    // generator has not created any numbers yet, so nothing has happened
+    verify(processNumber, never()).process(anyInt());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    // now numbers will be generated in N threads
+    // FluxSink is thread-safe, it can be shared among many threads
+    for (int i = 0; i < howManyThreads; i++) {
+
+      Thread.ofPlatform().start(() -> numbers.generate(howManyNumbers));
+    }
+
+    // blocking a bit and completing
+    SomeUtils.INSTANCE.aBitOfSleeping(2);
+
+    numbers.complete();
+
+    // ... and now all numbers generated by all threads are processed
+    verify(processNumber, times(howManyNumbers * howManyThreads)).process(anyInt());
+    verify(processNumber, atMostOnce()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
   }
 }

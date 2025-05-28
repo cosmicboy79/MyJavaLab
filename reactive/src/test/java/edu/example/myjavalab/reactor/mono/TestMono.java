@@ -24,7 +24,7 @@
 
 package edu.example.myjavalab.reactor.mono;
 
-import static edu.example.myjavalab.reactor.mono.internal.SomeUtils.ERROR_MESSAGE;
+import static edu.example.myjavalab.reactor.common.SomeUtils.ERROR_MESSAGE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,8 +34,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import edu.example.myjavalab.reactor.mono.internal.SomeBusinessLogic;
-import edu.example.myjavalab.reactor.mono.internal.SomeUtils;
+import edu.example.myjavalab.reactor.common.SomeBusinessLogic;
+import edu.example.myjavalab.reactor.common.SomeUtils;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -45,6 +45,9 @@ import reactor.core.publisher.Mono;
 
 /**
  * Playing around with {@link Mono} via JUnit tests.
+ * <p>
+ * The terms "producer" and "publisher" are used interchangeable in this test class.
+ * Likewise, the terms "consumer" and "subscriber".
  */
 public class TestMono {
 
