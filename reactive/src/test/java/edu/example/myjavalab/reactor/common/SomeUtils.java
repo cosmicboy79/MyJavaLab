@@ -25,6 +25,7 @@
 package edu.example.myjavalab.reactor.common;
 
 import java.time.Duration;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
@@ -102,5 +103,20 @@ public enum SomeUtils {
 
     hasBeenExecuted.set(true);
     return Stream.of(6, 2, 9).mapToInt(v -> v).sum();
+  }
+
+  /**
+   * Creates a Producer that generates a random number after a delay time.
+   * This is meant to simulate some "heavy processin" for test purposes.
+   *
+   * @param delayOfSeconds Delay time (to produce) in seconds
+   * @return a Producer for a random number
+   */
+  public Mono<Integer> someHeavyProcessing(int delayOfSeconds) {
+
+    Random random = new Random();
+    return Mono.fromSupplier(random::nextInt)
+               .log("delayElement")
+               .delayElement(Duration.ofSeconds(delayOfSeconds));
   }
 }
