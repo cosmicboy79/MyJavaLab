@@ -36,6 +36,7 @@ import static org.mockito.Mockito.verify;
 
 import edu.example.myjavalab.reactor.common.SomeBusinessLogic;
 import edu.example.myjavalab.reactor.common.SomeUtils;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -273,7 +274,7 @@ public class TestMono {
 
   /**
    * GIVEN a producer of a single value
-   * AND the creation of this producer is a heavyweight operation
+   * AND the creation of this producer is a heavyweight, cost operation
    * WHEN deferring its creation
    * THEN producer is only created when there is a subscription to it
    */
@@ -298,5 +299,46 @@ public class TestMono {
 
     assertTrue(hasBeenCreated.get());
     assertTrue(hasBeenExecuted.get());
+  }
+
+  /**
+   * GIVEN a producer of a single value
+   * AND it takes time to produce the value
+   * AND it has a timeout configuration
+   * WHEN subscriber asks for the value
+   * AND value is not returned within the timeout period
+   * THEN fallback value is returned instead
+   */
+  @Test
+  public void testTimeoutOnMono() {
+
+    // preparation
+    final int delayOfSeconds = 2;
+    final int fallbackValue = 321;
+
+    SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    // creating producer with timeout and error handling
+    SomeUtils.INSTANCE.someHeavyProcessing(delayOfSeconds)
+        .log("timeout")
+        .timeout(Duration.ofSeconds(delayOfSeconds - 1))
+        .log("onErrorReturn")
+        .onErrorReturn(fallbackValue)
+        .log("doOnNext")
+        .doOnNext(processNumber::process)
+        .log("doOnError")
+        .doOnError(processNumber::onError)
+        .log("subscribe")
+        .subscribe();
+
+    // waiting a bit...
+    SomeUtils.INSTANCE.aBitOfSleeping(delayOfSeconds + 1);
+
+    // checking
+    ArgumentCaptor<Integer> valueToProcess = ArgumentCaptor.captor();
+
+    verify(processNumber, atMostOnce()).process(valueToProcess.capture());
+
+    assertEquals(fallbackValue, valueToProcess.getValue());
   }
 }
