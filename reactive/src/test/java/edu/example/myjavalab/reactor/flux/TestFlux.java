@@ -38,6 +38,7 @@ import edu.example.myjavalab.reactor.common.SomeNumberSubscriber;
 import edu.example.myjavalab.reactor.flux.internal.NumberGenerator;
 import edu.example.myjavalab.reactor.common.SomeBusinessLogic;
 import edu.example.myjavalab.reactor.common.SomeUtils;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -269,7 +270,7 @@ public class TestFlux {
     final NumberGenerator numbers = new NumberGenerator();
 
     Flux.create(numbers)
-        .log("subscription!")
+        .log("sub")
         .subscribe(processNumber::process, processNumber::onError, processNumber::onComplete);
 
     // generator has not created any numbers yet, so nothing has happened
@@ -308,10 +309,10 @@ public class TestFlux {
     final NumberGenerator numbers = new NumberGenerator();
 
     Flux.create(numbers)
-        .log("subscription!")
+        .log("sub")
         .subscribe(subscriber);
 
-    // generator has not created any numbers yet, so nothing has happened
+    // all set, but generator has not created any numbers yet, so nothing has happened
     verify(processNumber, never()).process(anyInt());
     verify(processNumber, never()).onComplete();
     verify(processNumber, never()).onError(any(Throwable.class));
@@ -361,10 +362,10 @@ public class TestFlux {
     final NumberGenerator numbers = new NumberGenerator();
 
     Flux.create(numbers)
-        .log("subscription!")
+        .log("sub")
         .subscribe(processNumber::process, processNumber::onError, processNumber::onComplete);
 
-    // generator has not created any numbers yet, so nothing has happened
+    // all set, but generator has not created any numbers yet, so nothing has happened
     verify(processNumber, never()).process(anyInt());
     verify(processNumber, never()).onComplete();
     verify(processNumber, never()).onError(any(Throwable.class));
@@ -462,5 +463,59 @@ public class TestFlux {
     assertEquals(howManyToTake, valuesToProcess.getAllValues().size());
 
     valuesToProcess.getAllValues().forEach(capturedValue -> assertEquals(numberToGenerate, capturedValue));
+  }
+
+  /**
+   * GIVEN producer of numbers
+   * AND numbers are provided downstream via handle
+   * AND producer has hooks for processing the data
+   * WHEN subscribing to the producer with no consumer at all (implicit or explicit)
+   * THEN data is processed, as expected, via hooks
+   */
+  @Test
+  public void testFluxWithHooksInstead() {
+
+    // preparation
+    final int howManyNumbers = 5;
+    final List<Integer> collecting = new ArrayList<>();
+
+    final SomeBusinessLogic<Integer> processNumber = mock(SomeBusinessLogic.class);
+
+    // producer created, associated to a generator and with an explicit consumer subscribed to it
+    final NumberGenerator numbers = new NumberGenerator();
+
+    // create producer with no consumer associated to it, but using hooks instead
+    Flux.create(numbers)
+        .log("handle")
+        .handle((item, sink) -> {
+          collecting.add(item);
+          sink.next(item);
+        })
+        .log("cast")
+        .cast(Integer.class)
+        .log("sub")
+        .doOnNext(processNumber::process)
+        .doOnComplete(processNumber::onComplete)
+        .doOnError(processNumber::onError)
+        // no consumer at all
+        .subscribe();
+
+    // all set, but generator has not created any numbers yet, so nothing has happened
+    verify(processNumber, never()).process(anyInt());
+    verify(processNumber, never()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    // now numbers will be generated
+    numbers.generate(howManyNumbers);
+    numbers.complete();
+
+    ArgumentCaptor<Integer> valuesToProcess = ArgumentCaptor.captor();
+
+    // now checking the processing
+    verify(processNumber, times(howManyNumbers)).process(valuesToProcess.capture());
+    verify(processNumber, atMostOnce()).onComplete();
+    verify(processNumber, never()).onError(any(Throwable.class));
+
+    assertEquals(collecting, valuesToProcess.getAllValues());
   }
 }
