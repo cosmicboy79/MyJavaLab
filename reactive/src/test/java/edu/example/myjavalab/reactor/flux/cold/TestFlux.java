@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package edu.example.myjavalab.reactor.flux;
+package edu.example.myjavalab.reactor.flux.cold;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,6 +50,10 @@ import reactor.core.publisher.Flux;
  * <p>
  * The terms "producer" and "publisher" are used interchangeable in this test class.
  * Likewise, the terms "consumer" and "subscriber".
+ * <p>
+ * This Test class is located in the <code>cold</code> package, meaning that it contains
+ * tests related to "cold publishing", i.e., a publisher who needs at least one subscriber
+ * to emit the data, but also whose emitted data is not shared among different subscribers.
  */
 public class TestFlux {
 
